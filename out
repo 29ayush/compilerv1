@@ -1,0 +1,13 @@
+function main(a)
+ 	{
+
+if (a == 0) 
+ 	{
+
+return 5;
+}
+
+console.log(a);
+main(a - 1);
+}
+

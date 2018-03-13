@@ -4,11 +4,59 @@ structure AST = Abstract;
 structure Code_gen =
 struct
 
+
 exception ErrorExpression;
 exception TypeDeclError;
 exception ErrorStatement;
+exception ScopingError;
 (*fun extostring (AST.EXPR(x)) = String.concat(["(",(corextostring(x)),")"])*)
   (*| extostring _  = raise ErrorExpression*)
+
+structure ScopeMana = 
+struct 
+  structure inscopeMap = RedBlackMapFn(
+      struct 
+        type ord_key = string
+        val compare = String.compare
+      end) ;
+
+  structure outscopeMap = RedBlackMapFn(
+      struct 
+        type ord_key = int
+        val compare = Int.compare
+      end) ;
+
+  val scopedepth = ref 0;
+
+  val outscopemap = inscopeMap.empty;
+
+
+  fun pushScope _ = scopedepth:= !scopedepth + 1;  
+  fun popScope _ = let 
+                    val x = !scopedepth - 1;
+                  in 
+                    if (x<0 ) then
+                      raise ScopingError
+                    else
+                      scopedepth := x
+                  end;
+
+  fun getoutval NONE   = inscopeMap.empty
+    | getoutval SOME x = x
+
+  fun entervar name ctype = let 
+                              val x =  getoutval(outscopeMap.find(!outscopemap,!scopedepth))
+                              val y =  inscopeMap.insert(!x,name,ctype) 
+                              val z =  outscopeMap.insert(!x,!scopedepth)
+                            in
+                              
+                            end;
+
+
+  fun checkvar name = 
+end;
+
+
 
 fun extostring (AST.EXPR(x)) =  corextostring(x)
 
@@ -18,7 +66,7 @@ and corextostring(AST.IntConst x) = Int.toString(x)
   | corextostring(AST.Call(x,[])) = let 
                                       val z = extostring(x)
                                     in 
-                                      if(z="print") then
+                                      if(z="printf") then
                                         String.concat(["console.log","()"])
                                       else 
                                         String.concat([z,"()"])
@@ -27,7 +75,7 @@ and corextostring(AST.IntConst x) = Int.toString(x)
                                       val expry = String.extract((String.concat(map (fn z => String.concat([",",extostring(z)])) y)),1,NONE)
                                       val z = extostring(x)
                                     in
-                                      if(z="print") then
+                                      if(z="printf") then
                                         String.concat(["console.log","(",expry,")"])
                                       else 
                                         String.concat([z,"(",expry,")"])
@@ -61,23 +109,23 @@ and binoptostring AST.Plus   = " + "
   | binoptostring AST.Lte    = " <= "  
   | binoptostring AST.Eq     = " == "   
   | binoptostring AST.Neq    = " != "  
-  | binoptostring AST.And    = " && "  
+  | binoptostring AST.And    = " & &"  
   | binoptostring AST.Or     = " || "  
 
-and stostring (AST.STMT(x)) = String.concat([corestostring(x),"\n"])
+and stostring (AST.STMT(x)) = String.concat([corestostring(x),"; \n"])
   (*| stostring _  = raise ErrorStatement*)
 
 and slisttostring ([]) = "\n"
   | slisttostring x = String.concat((map (stostring) x))
 
 
-and corestostring(AST.Expr x) = extostring( x)^";"
-  | corestostring(AST.Compound (x,y)) = String.concat(["{\n",decllisttostring(x),slisttostring(y),"}"]) 
-  | corestostring(AST.While (x,y)) = String.concat(["while (",extostring(x),") \n \t",stostring(y)]) 
+and corestostring(AST.Expr x) = extostring( x)
+  | corestostring(AST.Compound (x,y)) = String.concat(["{",decllisttostring(x),slisttostring(y),"}"])
+  | corestostring(AST.While (x,y)) = String.concat(["while (",extostring(x),") \n \t",stostring(y)])
   | corestostring(AST.For (x,y,z,s)) = String.concat(["for (",opextostring(x),";",opextostring(y),";",opextostring(z),") \n \t",stostring(s)])
-  | corestostring(AST.Break)  = "break"^";"
-  | corestostring(AST.Continue)  = "continue"^";"
-  | corestostring(AST.Return x) = String.concat(["return ",opextostring(x)])^";"
+  | corestostring(AST.Break)  = "break"
+  | corestostring(AST.Continue)  = "continue"
+  | corestostring(AST.Return x) = String.concat(["return",opextostring(x)])
   | corestostring(AST.IfThen (x,y)) = String.concat(["if (",extostring(x),") \n \t",stostring(y)])
   | corestostring(AST.IfThenElse (x,y,z)) = String.concat(["if (",extostring(x),") \n \t",stostring(y),"else \n \t",stostring(z)])
   | corestostring _  = raise ErrorStatement
@@ -85,10 +133,8 @@ and corestostring(AST.Expr x) = extostring( x)^";"
 and opextostring (NONE) = ""
   | opextostring (SOME x) = extostring(x)
 
-and aopex1 "" = ";\n"
-  | aopex1 x  = " = " ^ x ^ "; \n"
 
-and decltostring (AST.VarDecl(x,y)) = String.concat([ctypetostring((#ctype x)),(#name x),aopex1(opextostring(y))])
+and decltostring (AST.VarDecl(x,y)) = String.concat([ctypetostring((#ctype x)),(#name x)," = ",opextostring(y),"; \n"])
   | decltostring (AST.FuncDecl(x,y,z)) = String.concat(["function ",#name x,"(",idlisttostring(y),")",opstostring(z),"\n"])
 
 and opstostring (NONE) = ";"
@@ -115,6 +161,7 @@ and ctypetostring (AST.Undetermined) = raise TypeDeclError
 
 fun convert_to_js(x:AST.ast) = decllisttostring(x)
 
+String.concat(list)
 
 fun gencode(filename,file_to_write) = let val absyn = Parse.parse(filename)
                                                  val file_out = TextIO.openOut file_to_write
